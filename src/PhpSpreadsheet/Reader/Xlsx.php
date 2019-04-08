@@ -1597,8 +1597,13 @@ class Xlsx extends BaseReader
                                     }
                                 }
                                 if ($xmlSheet->drawing && !$this->readDataOnly) {
+                                    $unparsedDrawings = [];
                                     foreach ($xmlSheet->drawing as $drawing) {
-                                        $fileDrawing = $drawings[(string) self::getArrayItem($drawing->attributes('http://schemas.openxmlformats.org/officeDocument/2006/relationships'), 'id')];
+                                        $drawingRelId = (string) self::getArrayItem($drawing->attributes('http://schemas.openxmlformats.org/officeDocument/2006/relationships'), 'id');
+                                        $fileDrawing = $drawings[$drawingRelId] ?? null;
+                                        if (!$fileDrawing) {
+                                            continue;
+                                        }
                                         //~ http://schemas.openxmlformats.org/package/2006/relationships"
                                         $relsDrawing = simplexml_load_string(
                                             $this->securityScanner->scan(
@@ -1630,128 +1635,135 @@ class Xlsx extends BaseReader
                                             $this->securityScanner->scan($this->getFromZipArchive($zip, $fileDrawing)),
                                             'SimpleXMLElement',
                                             Settings::getLibXmlLoaderOptions()
-                                        )->children('http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing');
+                                        );
+                                        if ($xmlDrawing !== false) {
+                                            $xmlDrawingChildren = $xmlDrawing->children('http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing');
 
-                                        if ($xmlDrawing->oneCellAnchor) {
-                                            foreach ($xmlDrawing->oneCellAnchor as $oneCellAnchor) {
-                                                if ($oneCellAnchor->pic->blipFill) {
-                                                    /** @var SimpleXMLElement $blip */
-                                                    $blip = $oneCellAnchor->pic->blipFill->children('http://schemas.openxmlformats.org/drawingml/2006/main')->blip;
-                                                    /** @var SimpleXMLElement $xfrm */
-                                                    $xfrm = $oneCellAnchor->pic->spPr->children('http://schemas.openxmlformats.org/drawingml/2006/main')->xfrm;
-                                                    /** @var SimpleXMLElement $outerShdw */
-                                                    $outerShdw = $oneCellAnchor->pic->spPr->children('http://schemas.openxmlformats.org/drawingml/2006/main')->effectLst->outerShdw;
-                                                    /** @var \SimpleXMLElement $hlinkClick */
-                                                    $hlinkClick = $oneCellAnchor->pic->nvPicPr->cNvPr->children('http://schemas.openxmlformats.org/drawingml/2006/main')->hlinkClick;
+                                            if ($xmlDrawingChildren->oneCellAnchor) {
+                                                foreach ($xmlDrawingChildren->oneCellAnchor as $oneCellAnchor) {
+                                                    if ($oneCellAnchor->pic->blipFill) {
+                                                        /** @var SimpleXMLElement $blip */
+                                                        $blip = $oneCellAnchor->pic->blipFill->children('http://schemas.openxmlformats.org/drawingml/2006/main')->blip;
+                                                        /** @var SimpleXMLElement $xfrm */
+                                                        $xfrm = $oneCellAnchor->pic->spPr->children('http://schemas.openxmlformats.org/drawingml/2006/main')->xfrm;
+                                                        /** @var SimpleXMLElement $outerShdw */
+                                                        $outerShdw = $oneCellAnchor->pic->spPr->children('http://schemas.openxmlformats.org/drawingml/2006/main')->effectLst->outerShdw;
+                                                        /** @var \SimpleXMLElement $hlinkClick */
+                                                        $hlinkClick = $oneCellAnchor->pic->nvPicPr->cNvPr->children('http://schemas.openxmlformats.org/drawingml/2006/main')->hlinkClick;
 
-                                                    $objDrawing = new \PhpOffice\PhpSpreadsheet\Worksheet\Drawing();
-                                                    $objDrawing->setName((string) self::getArrayItem($oneCellAnchor->pic->nvPicPr->cNvPr->attributes(), 'name'));
-                                                    $objDrawing->setDescription((string) self::getArrayItem($oneCellAnchor->pic->nvPicPr->cNvPr->attributes(), 'descr'));
-                                                    $objDrawing->setPath(
-                                                        'zip://' . File::realpath($pFilename) . '#' .
-                                                        $images[(string) self::getArrayItem(
-                                                            $blip->attributes('http://schemas.openxmlformats.org/officeDocument/2006/relationships'),
-                                                            'embed'
-                                                        )],
-                                                        false
-                                                    );
-                                                    $objDrawing->setCoordinates(Coordinate::stringFromColumnIndex(((string) $oneCellAnchor->from->col) + 1) . ($oneCellAnchor->from->row + 1));
-                                                    $objDrawing->setOffsetX(Drawing::EMUToPixels($oneCellAnchor->from->colOff));
-                                                    $objDrawing->setOffsetY(Drawing::EMUToPixels($oneCellAnchor->from->rowOff));
-                                                    $objDrawing->setResizeProportional(false);
-                                                    $objDrawing->setWidth(Drawing::EMUToPixels(self::getArrayItem($oneCellAnchor->ext->attributes(), 'cx')));
-                                                    $objDrawing->setHeight(Drawing::EMUToPixels(self::getArrayItem($oneCellAnchor->ext->attributes(), 'cy')));
-                                                    if ($xfrm) {
-                                                        $objDrawing->setRotation(Drawing::angleToDegrees(self::getArrayItem($xfrm->attributes(), 'rot')));
+                                                        $objDrawing = new \PhpOffice\PhpSpreadsheet\Worksheet\Drawing();
+                                                        $objDrawing->setName((string) self::getArrayItem($oneCellAnchor->pic->nvPicPr->cNvPr->attributes(), 'name'));
+                                                        $objDrawing->setDescription((string) self::getArrayItem($oneCellAnchor->pic->nvPicPr->cNvPr->attributes(), 'descr'));
+                                                        $objDrawing->setPath(
+                                                            'zip://' . File::realpath($pFilename) . '#' .
+                                                            $images[(string) self::getArrayItem(
+                                                                $blip->attributes('http://schemas.openxmlformats.org/officeDocument/2006/relationships'),
+                                                                'embed'
+                                                            )],
+                                                            false
+                                                        );
+                                                        $objDrawing->setCoordinates(Coordinate::stringFromColumnIndex(((string) $oneCellAnchor->from->col) + 1) . ($oneCellAnchor->from->row + 1));
+                                                        $objDrawing->setOffsetX(Drawing::EMUToPixels($oneCellAnchor->from->colOff));
+                                                        $objDrawing->setOffsetY(Drawing::EMUToPixels($oneCellAnchor->from->rowOff));
+                                                        $objDrawing->setResizeProportional(false);
+                                                        $objDrawing->setWidth(Drawing::EMUToPixels(self::getArrayItem($oneCellAnchor->ext->attributes(), 'cx')));
+                                                        $objDrawing->setHeight(Drawing::EMUToPixels(self::getArrayItem($oneCellAnchor->ext->attributes(), 'cy')));
+                                                        if ($xfrm) {
+                                                            $objDrawing->setRotation(Drawing::angleToDegrees(self::getArrayItem($xfrm->attributes(), 'rot')));
+                                                        }
+                                                        if ($outerShdw) {
+                                                            $shadow = $objDrawing->getShadow();
+                                                            $shadow->setVisible(true);
+                                                            $shadow->setBlurRadius(Drawing::EMUTopixels(self::getArrayItem($outerShdw->attributes(), 'blurRad')));
+                                                            $shadow->setDistance(Drawing::EMUTopixels(self::getArrayItem($outerShdw->attributes(), 'dist')));
+                                                            $shadow->setDirection(Drawing::angleToDegrees(self::getArrayItem($outerShdw->attributes(), 'dir')));
+                                                            $shadow->setAlignment((string) self::getArrayItem($outerShdw->attributes(), 'algn'));
+                                                            $shadow->getColor()->setRGB(self::getArrayItem($outerShdw->srgbClr->attributes(), 'val'));
+                                                            $shadow->setAlpha(self::getArrayItem($outerShdw->srgbClr->alpha->attributes(), 'val') / 1000);
+                                                        }
+
+                                                        $this->readHyperLinkDrawing($objDrawing, $oneCellAnchor, $hyperlinks);
+
+                                                        $objDrawing->setWorksheet($docSheet);
+                                                    } else {
+                                                        //    ? Can charts be positioned with a oneCellAnchor ?
+                                                        $coordinates = Coordinate::stringFromColumnIndex(((string) $oneCellAnchor->from->col) + 1) . ($oneCellAnchor->from->row + 1);
+                                                        $offsetX = Drawing::EMUToPixels($oneCellAnchor->from->colOff);
+                                                        $offsetY = Drawing::EMUToPixels($oneCellAnchor->from->rowOff);
+                                                        $width = Drawing::EMUToPixels(self::getArrayItem($oneCellAnchor->ext->attributes(), 'cx'));
+                                                        $height = Drawing::EMUToPixels(self::getArrayItem($oneCellAnchor->ext->attributes(), 'cy'));
                                                     }
-                                                    if ($outerShdw) {
-                                                        $shadow = $objDrawing->getShadow();
-                                                        $shadow->setVisible(true);
-                                                        $shadow->setBlurRadius(Drawing::EMUTopixels(self::getArrayItem($outerShdw->attributes(), 'blurRad')));
-                                                        $shadow->setDistance(Drawing::EMUTopixels(self::getArrayItem($outerShdw->attributes(), 'dist')));
-                                                        $shadow->setDirection(Drawing::angleToDegrees(self::getArrayItem($outerShdw->attributes(), 'dir')));
-                                                        $shadow->setAlignment((string) self::getArrayItem($outerShdw->attributes(), 'algn'));
-                                                        $shadow->getColor()->setRGB(self::getArrayItem($outerShdw->srgbClr->attributes(), 'val'));
-                                                        $shadow->setAlpha(self::getArrayItem($outerShdw->srgbClr->alpha->attributes(), 'val') / 1000);
-                                                    }
-
-                                                    $this->readHyperLinkDrawing($objDrawing, $oneCellAnchor, $hyperlinks);
-
-                                                    $objDrawing->setWorksheet($docSheet);
-                                                } else {
-                                                    //    ? Can charts be positioned with a oneCellAnchor ?
-                                                    $coordinates = Coordinate::stringFromColumnIndex(((string) $oneCellAnchor->from->col) + 1) . ($oneCellAnchor->from->row + 1);
-                                                    $offsetX = Drawing::EMUToPixels($oneCellAnchor->from->colOff);
-                                                    $offsetY = Drawing::EMUToPixels($oneCellAnchor->from->rowOff);
-                                                    $width = Drawing::EMUToPixels(self::getArrayItem($oneCellAnchor->ext->attributes(), 'cx'));
-                                                    $height = Drawing::EMUToPixels(self::getArrayItem($oneCellAnchor->ext->attributes(), 'cy'));
                                                 }
                                             }
-                                        }
-                                        if ($xmlDrawing->twoCellAnchor) {
-                                            foreach ($xmlDrawing->twoCellAnchor as $twoCellAnchor) {
-                                                if ($twoCellAnchor->pic->blipFill) {
-                                                    $blip = $twoCellAnchor->pic->blipFill->children('http://schemas.openxmlformats.org/drawingml/2006/main')->blip;
-                                                    $xfrm = $twoCellAnchor->pic->spPr->children('http://schemas.openxmlformats.org/drawingml/2006/main')->xfrm;
-                                                    $outerShdw = $twoCellAnchor->pic->spPr->children('http://schemas.openxmlformats.org/drawingml/2006/main')->effectLst->outerShdw;
-                                                    $hlinkClick = $twoCellAnchor->pic->nvPicPr->cNvPr->children('http://schemas.openxmlformats.org/drawingml/2006/main')->hlinkClick;
-                                                    $objDrawing = new \PhpOffice\PhpSpreadsheet\Worksheet\Drawing();
-                                                    $objDrawing->setName((string) self::getArrayItem($twoCellAnchor->pic->nvPicPr->cNvPr->attributes(), 'name'));
-                                                    $objDrawing->setDescription((string) self::getArrayItem($twoCellAnchor->pic->nvPicPr->cNvPr->attributes(), 'descr'));
-                                                    $objDrawing->setPath(
-                                                        'zip://' . File::realpath($pFilename) . '#' .
-                                                        $images[(string) self::getArrayItem(
-                                                            $blip->attributes('http://schemas.openxmlformats.org/officeDocument/2006/relationships'),
-                                                            'embed'
-                                                        )],
-                                                        false
-                                                    );
-                                                    $objDrawing->setCoordinates(Coordinate::stringFromColumnIndex(((string) $twoCellAnchor->from->col) + 1) . ($twoCellAnchor->from->row + 1));
-                                                    $objDrawing->setOffsetX(Drawing::EMUToPixels($twoCellAnchor->from->colOff));
-                                                    $objDrawing->setOffsetY(Drawing::EMUToPixels($twoCellAnchor->from->rowOff));
-                                                    $objDrawing->setResizeProportional(false);
+                                            if ($xmlDrawingChildren->twoCellAnchor) {
+                                                foreach ($xmlDrawingChildren->twoCellAnchor as $twoCellAnchor) {
+                                                    if ($twoCellAnchor->pic->blipFill) {
+                                                        $blip = $twoCellAnchor->pic->blipFill->children('http://schemas.openxmlformats.org/drawingml/2006/main')->blip;
+                                                        $xfrm = $twoCellAnchor->pic->spPr->children('http://schemas.openxmlformats.org/drawingml/2006/main')->xfrm;
+                                                        $outerShdw = $twoCellAnchor->pic->spPr->children('http://schemas.openxmlformats.org/drawingml/2006/main')->effectLst->outerShdw;
+                                                        $hlinkClick = $twoCellAnchor->pic->nvPicPr->cNvPr->children('http://schemas.openxmlformats.org/drawingml/2006/main')->hlinkClick;
+                                                        $objDrawing = new \PhpOffice\PhpSpreadsheet\Worksheet\Drawing();
+                                                        $objDrawing->setName((string) self::getArrayItem($twoCellAnchor->pic->nvPicPr->cNvPr->attributes(), 'name'));
+                                                        $objDrawing->setDescription((string) self::getArrayItem($twoCellAnchor->pic->nvPicPr->cNvPr->attributes(), 'descr'));
+                                                        $objDrawing->setPath(
+                                                            'zip://' . File::realpath($pFilename) . '#' .
+                                                            $images[(string) self::getArrayItem(
+                                                                $blip->attributes('http://schemas.openxmlformats.org/officeDocument/2006/relationships'),
+                                                                'embed'
+                                                            )],
+                                                            false
+                                                        );
+                                                        $objDrawing->setCoordinates(Coordinate::stringFromColumnIndex(((string) $twoCellAnchor->from->col) + 1) . ($twoCellAnchor->from->row + 1));
+                                                        $objDrawing->setOffsetX(Drawing::EMUToPixels($twoCellAnchor->from->colOff));
+                                                        $objDrawing->setOffsetY(Drawing::EMUToPixels($twoCellAnchor->from->rowOff));
+                                                        $objDrawing->setResizeProportional(false);
 
-                                                    if ($xfrm) {
-                                                        $objDrawing->setWidth(Drawing::EMUToPixels(self::getArrayItem($xfrm->ext->attributes(), 'cx')));
-                                                        $objDrawing->setHeight(Drawing::EMUToPixels(self::getArrayItem($xfrm->ext->attributes(), 'cy')));
-                                                        $objDrawing->setRotation(Drawing::angleToDegrees(self::getArrayItem($xfrm->attributes(), 'rot')));
+                                                        if ($xfrm) {
+                                                            $objDrawing->setWidth(Drawing::EMUToPixels(self::getArrayItem($xfrm->ext->attributes(), 'cx')));
+                                                            $objDrawing->setHeight(Drawing::EMUToPixels(self::getArrayItem($xfrm->ext->attributes(), 'cy')));
+                                                            $objDrawing->setRotation(Drawing::angleToDegrees(self::getArrayItem($xfrm->attributes(), 'rot')));
+                                                        }
+                                                        if ($outerShdw) {
+                                                            $shadow = $objDrawing->getShadow();
+                                                            $shadow->setVisible(true);
+                                                            $shadow->setBlurRadius(Drawing::EMUTopixels(self::getArrayItem($outerShdw->attributes(), 'blurRad')));
+                                                            $shadow->setDistance(Drawing::EMUTopixels(self::getArrayItem($outerShdw->attributes(), 'dist')));
+                                                            $shadow->setDirection(Drawing::angleToDegrees(self::getArrayItem($outerShdw->attributes(), 'dir')));
+                                                            $shadow->setAlignment((string) self::getArrayItem($outerShdw->attributes(), 'algn'));
+                                                            $shadow->getColor()->setRGB(self::getArrayItem($outerShdw->srgbClr->attributes(), 'val'));
+                                                            $shadow->setAlpha(self::getArrayItem($outerShdw->srgbClr->alpha->attributes(), 'val') / 1000);
+                                                        }
+
+                                                        $this->readHyperLinkDrawing($objDrawing, $twoCellAnchor, $hyperlinks);
+
+                                                        $objDrawing->setWorksheet($docSheet);
+                                                    } elseif (($this->includeCharts) && ($twoCellAnchor->graphicFrame)) {
+                                                        $fromCoordinate = Coordinate::stringFromColumnIndex(((string) $twoCellAnchor->from->col) + 1) . ($twoCellAnchor->from->row + 1);
+                                                        $fromOffsetX = Drawing::EMUToPixels($twoCellAnchor->from->colOff);
+                                                        $fromOffsetY = Drawing::EMUToPixels($twoCellAnchor->from->rowOff);
+                                                        $toCoordinate = Coordinate::stringFromColumnIndex(((string) $twoCellAnchor->to->col) + 1) . ($twoCellAnchor->to->row + 1);
+                                                        $toOffsetX = Drawing::EMUToPixels($twoCellAnchor->to->colOff);
+                                                        $toOffsetY = Drawing::EMUToPixels($twoCellAnchor->to->rowOff);
+                                                        $graphic = $twoCellAnchor->graphicFrame->children('http://schemas.openxmlformats.org/drawingml/2006/main')->graphic;
+                                                        /** @var SimpleXMLElement $chartRef */
+                                                        $chartRef = $graphic->graphicData->children('http://schemas.openxmlformats.org/drawingml/2006/chart')->chart;
+                                                        $thisChart = (string) $chartRef->attributes('http://schemas.openxmlformats.org/officeDocument/2006/relationships');
+
+                                                        $chartDetails[$docSheet->getTitle() . '!' . $thisChart] = [
+                                                            'fromCoordinate' => $fromCoordinate,
+                                                            'fromOffsetX' => $fromOffsetX,
+                                                            'fromOffsetY' => $fromOffsetY,
+                                                            'toCoordinate' => $toCoordinate,
+                                                            'toOffsetX' => $toOffsetX,
+                                                            'toOffsetY' => $toOffsetY,
+                                                            'worksheetTitle' => $docSheet->getTitle(),
+                                                        ];
                                                     }
-                                                    if ($outerShdw) {
-                                                        $shadow = $objDrawing->getShadow();
-                                                        $shadow->setVisible(true);
-                                                        $shadow->setBlurRadius(Drawing::EMUTopixels(self::getArrayItem($outerShdw->attributes(), 'blurRad')));
-                                                        $shadow->setDistance(Drawing::EMUTopixels(self::getArrayItem($outerShdw->attributes(), 'dist')));
-                                                        $shadow->setDirection(Drawing::angleToDegrees(self::getArrayItem($outerShdw->attributes(), 'dir')));
-                                                        $shadow->setAlignment((string) self::getArrayItem($outerShdw->attributes(), 'algn'));
-                                                        $shadow->getColor()->setRGB(self::getArrayItem($outerShdw->srgbClr->attributes(), 'val'));
-                                                        $shadow->setAlpha(self::getArrayItem($outerShdw->srgbClr->alpha->attributes(), 'val') / 1000);
-                                                    }
-
-                                                    $this->readHyperLinkDrawing($objDrawing, $twoCellAnchor, $hyperlinks);
-
-                                                    $objDrawing->setWorksheet($docSheet);
-                                                } elseif (($this->includeCharts) && ($twoCellAnchor->graphicFrame)) {
-                                                    $fromCoordinate = Coordinate::stringFromColumnIndex(((string) $twoCellAnchor->from->col) + 1) . ($twoCellAnchor->from->row + 1);
-                                                    $fromOffsetX = Drawing::EMUToPixels($twoCellAnchor->from->colOff);
-                                                    $fromOffsetY = Drawing::EMUToPixels($twoCellAnchor->from->rowOff);
-                                                    $toCoordinate = Coordinate::stringFromColumnIndex(((string) $twoCellAnchor->to->col) + 1) . ($twoCellAnchor->to->row + 1);
-                                                    $toOffsetX = Drawing::EMUToPixels($twoCellAnchor->to->colOff);
-                                                    $toOffsetY = Drawing::EMUToPixels($twoCellAnchor->to->rowOff);
-                                                    $graphic = $twoCellAnchor->graphicFrame->children('http://schemas.openxmlformats.org/drawingml/2006/main')->graphic;
-                                                    /** @var SimpleXMLElement $chartRef */
-                                                    $chartRef = $graphic->graphicData->children('http://schemas.openxmlformats.org/drawingml/2006/chart')->chart;
-                                                    $thisChart = (string) $chartRef->attributes('http://schemas.openxmlformats.org/officeDocument/2006/relationships');
-
-                                                    $chartDetails[$docSheet->getTitle() . '!' . $thisChart] = [
-                                                        'fromCoordinate' => $fromCoordinate,
-                                                        'fromOffsetX' => $fromOffsetX,
-                                                        'fromOffsetY' => $fromOffsetY,
-                                                        'toCoordinate' => $toCoordinate,
-                                                        'toOffsetX' => $toOffsetX,
-                                                        'toOffsetY' => $toOffsetY,
-                                                        'worksheetTitle' => $docSheet->getTitle(),
-                                                    ];
                                                 }
+                                            }
+                                            if ($relsDrawing === false && $xmlDrawing->count() == 0) {
+                                                // Save Drawing without rels and children as unparsed
+                                                $unparsedDrawings[$drawingRelId] = $xmlDrawing->asXML();
                                             }
                                         }
                                     }
@@ -1760,20 +1772,29 @@ class Xlsx extends BaseReader
                                     $unparsedLoadedData['sheets'][$docSheet->getCodeName()]['drawingOriginalIds'] = [];
                                     foreach ($relsWorksheet->Relationship as $ele) {
                                         if ($ele['Type'] == 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing') {
-                                            $unparsedLoadedData['sheets'][$docSheet->getCodeName()]['drawingOriginalIds'][(string) $ele['Target']] = (string) $ele['Id'];
+                                            $drawingRelId = (string) $ele['Id'];
+                                            $unparsedLoadedData['sheets'][$docSheet->getCodeName()]['drawingOriginalIds'][(string) $ele['Target']] = $drawingRelId;
+                                            if (isset($unparsedDrawings[$drawingRelId])) {
+                                                $unparsedLoadedData['sheets'][$docSheet->getCodeName()]['Drawings'][$drawingRelId] = $unparsedDrawings[$drawingRelId];
+                                            }
                                         }
                                     }
 
-                                    // unparsed drawing AlternateContent
-                                    $xmlAltDrawing = simplexml_load_string(
-                                        $this->securityScanner->scan($this->getFromZipArchive($zip, $fileDrawing)),
-                                        'SimpleXMLElement',
-                                        Settings::getLibXmlLoaderOptions()
-                                    )->children('http://schemas.openxmlformats.org/markup-compatibility/2006');
+                                    if ($fileDrawing) {
+                                        // unparsed drawing AlternateContent
+                                        $xmlAltDrawing = simplexml_load_string(
+                                            $this->securityScanner->scan($this->getFromZipArchive($zip, $fileDrawing)),
+                                            'SimpleXMLElement',
+                                            Settings::getLibXmlLoaderOptions()
+                                        );
+                                        if ($xmlAltDrawing !== false) {
+                                            $xmlAltDrawingChildren = $xmlAltDrawing->children('http://schemas.openxmlformats.org/markup-compatibility/2006');
 
-                                    if ($xmlAltDrawing->AlternateContent) {
-                                        foreach ($xmlAltDrawing->AlternateContent as $alternateContent) {
-                                            $unparsedLoadedData['sheets'][$docSheet->getCodeName()]['drawingAlternateContents'][] = $alternateContent->asXML();
+                                            if ($xmlAltDrawingChildren->AlternateContent) {
+                                                foreach ($xmlAltDrawingChildren->AlternateContent as $alternateContent) {
+                                                    $unparsedLoadedData['sheets'][$docSheet->getCodeName()]['drawingAlternateContents'][] = $alternateContent->asXML();
+                                                }
+                                            }
                                         }
                                     }
                                 }
