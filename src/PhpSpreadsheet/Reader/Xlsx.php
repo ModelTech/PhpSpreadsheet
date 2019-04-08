@@ -1600,7 +1600,10 @@ class Xlsx extends BaseReader
                                     $unparsedDrawings = [];
                                     foreach ($xmlSheet->drawing as $drawing) {
                                         $drawingRelId = (string) self::getArrayItem($drawing->attributes('http://schemas.openxmlformats.org/officeDocument/2006/relationships'), 'id');
-                                        $fileDrawing = $drawings[$drawingRelId];
+                                        $fileDrawing = $drawings[$drawingRelId] ?? null;
+                                        if (!$fileDrawing) {
+                                            continue;
+                                        }
                                         //~ http://schemas.openxmlformats.org/package/2006/relationships"
                                         $relsDrawing = simplexml_load_string(
                                             $this->securityScanner->scan(
@@ -1633,6 +1636,7 @@ class Xlsx extends BaseReader
                                             'SimpleXMLElement',
                                             Settings::getLibXmlLoaderOptions()
                                         );
+                                        if ($xmlDrawing !== false) {
                                         $xmlDrawingChildren = $xmlDrawing->children('http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing');
 
                                         if ($xmlDrawingChildren->oneCellAnchor) {
@@ -1761,6 +1765,7 @@ class Xlsx extends BaseReader
                                             // Save Drawing without rels and children as unparsed
                                             $unparsedDrawings[$drawingRelId] = $xmlDrawing->asXML();
                                         }
+                                        }
                                     }
 
                                     // store original rId of drawing files
@@ -1775,17 +1780,22 @@ class Xlsx extends BaseReader
                                         }
                                     }
 
+                                    if ($fileDrawing) {
                                     // unparsed drawing AlternateContent
                                     $xmlAltDrawing = simplexml_load_string(
                                         $this->securityScanner->scan($this->getFromZipArchive($zip, $fileDrawing)),
                                         'SimpleXMLElement',
                                         Settings::getLibXmlLoaderOptions()
-                                    )->children('http://schemas.openxmlformats.org/markup-compatibility/2006');
+                                    );
+                                    if ($xmlAltDrawing !== false) {
+                                        $xmlAltDrawingChildren = $xmlAltDrawing->children('http://schemas.openxmlformats.org/markup-compatibility/2006');
 
-                                    if ($xmlAltDrawing->AlternateContent) {
-                                        foreach ($xmlAltDrawing->AlternateContent as $alternateContent) {
-                                            $unparsedLoadedData['sheets'][$docSheet->getCodeName()]['drawingAlternateContents'][] = $alternateContent->asXML();
+                                        if ($xmlAltDrawingChildren->AlternateContent) {
+                                            foreach ($xmlAltDrawingChildren->AlternateContent as $alternateContent) {
+                                                $unparsedLoadedData['sheets'][$docSheet->getCodeName()]['drawingAlternateContents'][] = $alternateContent->asXML();
+                                            }
                                         }
+                                    }
                                     }
                                 }
                             }
